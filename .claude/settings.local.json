@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "WebFetch(domain:fastmcp.org)"
+    ],
+    "deny": []
+  }
+}
