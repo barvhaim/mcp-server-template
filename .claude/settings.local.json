@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(uv:*)",
-      "WebFetch(domain:fastmcp.org)"
+      "WebFetch(domain:fastmcp.org)",
+      "mcp__web-search__google_pse_search",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }

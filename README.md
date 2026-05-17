@@ -9,6 +9,7 @@ This template provides a minimal foundation for creating MCP servers that can ex
 ## Features
 
 - Simple MCP server setup with FastMCP
+- Streamable HTTP transport (runs on `127.0.0.1:5555`)
 - Example tool implementation (`add` function)
 - Modern Python dependency management with `uv`
 - Code formatting with Black
@@ -24,6 +25,8 @@ This template provides a minimal foundation for creating MCP servers that can ex
    ```bash
    uv run main.py
    ```
+
+   The server will start on `http://127.0.0.1:5555` using the Streamable HTTP transport.
 
 ## Development
 
@@ -62,79 +65,89 @@ Model Context Protocol (MCP) is a universal standard for connecting AI applicati
 - **Prompts**: Reusable interaction templates for common tasks
 - **Transport**: STDIO (local), HTTP, or Streamable HTTP connections
 
-## Claude Desktop Integration
+## Connecting Clients
 
-To connect your MCP server to Claude Desktop, add this to your `claude_desktop_config.json`:
+This server uses the **Streamable HTTP** transport, so clients connect over HTTP rather than spawning the process via STDIO. Start the server first (`uv run main.py`), then connect from your client.
 
-**macOS/Linux**: `~/.config/claude/claude_desktop_config.json`  
+### Claude Code (CLI)
+
+Claude Code supports Streamable HTTP natively. Register the server with:
+
+```bash
+claude mcp add --transport http your-server-name http://127.0.0.1:5555/mcp
+```
+
+### Claude Desktop
+
+Claude Desktop's `claude_desktop_config.json` does **not** natively support Streamable HTTP — it only spawns STDIO servers. Use the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge to proxy STDIO to your HTTP endpoint:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "your-server-name": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/absolute/path/to/your/server",
-        "run",
-        "main.py"
-      ]
+      "command": "npx",
+      "args": ["mcp-remote", "http://127.0.0.1:5555/mcp"]
     }
   }
 }
 ```
 
 After configuration:
-1. Restart Claude Desktop completely
-2. Your server tools will appear in the interface
-3. Test by asking Claude to use your tools
+1. Make sure the server is running (`uv run main.py`)
+2. Restart Claude Desktop completely
+3. Your server tools will appear in the interface
+4. Test by asking Claude to use your tools
+
+### Other clients
+
+Clients that support Streamable HTTP natively (Cursor, MCP Inspector, custom clients) can connect directly to `http://127.0.0.1:5555/mcp` without a bridge.
 
 ## Testing & Debugging
 
 ### MCP Inspector
-Interactive web interface for testing your server:
+Interactive web interface for testing your server. Start the server first, then point Inspector at the HTTP endpoint:
 
 ```bash
-npm install -g @modelcontextprotocol/inspector
-npx @modelcontextprotocol/inspector main.py
+uv run main.py  # in one terminal
+npx @modelcontextprotocol/inspector  # in another, then connect to http://127.0.0.1:5555/mcp
 ```
 
 ### Manual Testing
-Test your server directly with JSON-RPC:
+MCP uses JSON-RPC 2.0 as its message format across all transports. With Streamable HTTP, you send those JSON-RPC messages as HTTP POST bodies:
 
 ```bash
-echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | uv run main.py
+curl -X POST http://127.0.0.1:5555/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
 ### Common Issues
 
-- **Use absolute paths** in Claude Desktop config
-- **Never use print()** in STDIO mode (use logging to stderr)
+- **Server must be running** before clients can connect (HTTP transport, not STDIO)
+- **Port conflicts**: change the `port` argument in `main.py` if `5555` is in use
 - **Proper type hints** are required for all tools
 - Check Claude Desktop logs: `~/Library/Logs/Claude/mcp.log` (macOS)
 
 ## Advanced Features
 
-### Multiple Transport Types
+### Transport Configuration
+
+This template runs with the Streamable HTTP transport:
 
 ```python
-import os
 from fastmcp import FastMCP
 
-mcp = FastMCP("MyServer")
+mcp = FastMCP("Demo 🚀")
 
 if __name__ == "__main__":
-    transport = os.getenv("MCP_TRANSPORT", "stdio")
-    
-    if transport == "http":
-        # HTTP transport for web integration
-        import uvicorn
-        uvicorn.run(mcp.create_fastapi_app(), host="0.0.0.0", port=8000)
-    else:
-        # Default STDIO for Claude Desktop
-        mcp.run()
+    mcp.run(transport="streamable-http", host="127.0.0.1", port=5555)
 ```
+
+To switch to STDIO (for direct Claude Desktop spawning), replace the `mcp.run(...)` call with `mcp.run()`.
 
 ### Adding Resources and Prompts
 
